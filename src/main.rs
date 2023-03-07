@@ -20,6 +20,12 @@ struct Mass(u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Component)]
 struct Pause(bool);
 
+#[derive(Debug, Clone, PartialEq, Component)]
+struct SortedEntitiesByX(Vec<(Entity, f32)>);
+
+#[derive(Debug, Clone, PartialEq, Component)]
+struct SortedEntitiesByY(Vec<(Entity, f32)>);
+
 fn main() {
 	App::new()
 		.add_plugins(DefaultPlugins)
@@ -33,6 +39,7 @@ fn main() {
 		.add_system(handle_collision)
 		.add_system(exit_on_escape_system)
 		.add_system(pause_game)
+		.add_system(maintain_sorted_entities_x)
 		.run();
 }
 
@@ -53,6 +60,12 @@ fn exit_on_escape_system(
 	if keyboard_input.just_pressed(KeyCode::Escape) {
 		app_exit_events.send(AppExit);
 	}
+}
+
+// Function that maintains a sorted list of entities by x position
+fn maintain_sorted_entities_x(mut list: Query<&'static mut SortedEntitiesByX>) {
+	let mut list = list.single_mut();
+	list.0.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 }
 
 // Function system to handle collision by reversing the velocity
@@ -115,26 +128,9 @@ fn update_from_gravity(
 	}
 }
 
-// Function to spawn the entities, given a location and color
-fn spawn_entity(
-	commands: &mut Commands,
-	meshes: &mut ResMut<Assets<Mesh>>,
-	materials: &mut ResMut<Assets<ColorMaterial>>,
-	x: f32,
-) {
-	commands
-		.spawn(MaterialMesh2dBundle {
-			mesh: meshes.add(shape::Circle::new(5.).into()).into(),
-			material: materials.add(ColorMaterial::from(Color::BLUE)),
-			transform: Transform::from_translation(Vec3::new(x, 0., 0.)),
-			..default()
-		})
-		.insert(Velocity(Vec3::new(0., 10., 0.)))
-		.insert(Mass(10));
-}
-
 fn setup(
 	mut commands: Commands,
+	// Put entities into SortedEntitiesByX	and SortedEntitiesByY
 	mut meshes: ResMut<Assets<Mesh>>,
 	mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
@@ -154,9 +150,27 @@ fn setup(
 			..Default::default()
 		});
 
+	let mut x_items: Vec<(Entity, f32)> = Vec::new();
+	let mut y_items: Vec<(Entity, f32)> = Vec::new();
+
 	for i in 0..20 {
-		spawn_entity(&mut commands, &mut meshes, &mut materials, 100.0 * i as f32);
+		let x = 100.0 * i as f32;
+		let entity = MaterialMesh2dBundle {
+			mesh: meshes.add(shape::Circle::new(5.).into()).into(),
+			material: materials.add(ColorMaterial::from(Color::BLUE)),
+			transform: Transform::from_translation(Vec3::new(x, 0., 0.)),
+			..default()
+		};
+
+		let cmd = commands.spawn(entity);
+
+		let id = cmd.id();
+		x_items.push((id.clone(), x));
+		y_items.push((id.clone(), 0.));
 	}
+
+	commands.spawn(SortedEntitiesByX(x_items));
+	commands.spawn(SortedEntitiesByY(y_items));
 
 	commands.spawn(Pause(false));
 }
